@@ -38,7 +38,7 @@ class ExtractionJob:
     burst_file: BurstFile
     frame_indices: list[int] = field(default_factory=list)  # empty = all
     output_dir: Path = field(default_factory=lambda: Path.cwd())
-    output_format: str = "cr3"
+    output_format: str = "dng"
     status: str = "pending"       # pending, running, completed, failed
     progress: float = 0.0         # 0.0 to 1.0
     extracted_files: list[Path] = field(default_factory=list)
@@ -48,6 +48,8 @@ class ExtractionJob:
 @dataclass
 class AppConfig:
     """Application configuration."""
+    dnglab_path: str | None = None
+    output_format: str = "dng"
     default_output_dir: str = ""
     output_subfolder_per_burst: bool = True
     output_naming: str = "original_prefix"  # 'sequential' or 'original_prefix'

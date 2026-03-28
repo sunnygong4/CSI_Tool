@@ -2,11 +2,14 @@
 
 import logging
 import threading
+from pathlib import Path
 from typing import Callable
 
 from .cr3_parser import CR3Parser
+from .dnglab_backend import DNGLabBackend, DNGLabError
 from .models import AppConfig, ExtractionJob
 from .native_cr3_backend import NativeCR3Backend, NativeCR3Error
+from ..utils.dnglab_finder import find_dnglab, validate_dnglab
 
 logger = logging.getLogger(__name__)
 
@@ -18,12 +21,36 @@ class Extractor:
         self.config = config
         self.parser = parser
         self.native_backend = NativeCR3Backend()
+        self.dnglab_backend: DNGLabBackend | None = None
         self._cancel_event = threading.Event()
         self._worker_thread: threading.Thread | None = None
+        self._init_dnglab()
+
+    @property
+    def has_dnglab(self) -> bool:
+        return self.dnglab_backend is not None
 
     @property
     def is_running(self) -> bool:
         return self._worker_thread is not None and self._worker_thread.is_alive()
+
+    def _init_dnglab(self) -> None:
+        path = find_dnglab(self.config.dnglab_path)
+        if not path:
+            self.dnglab_backend = None
+            return
+        self.dnglab_backend = DNGLabBackend(path)
+        self.config.dnglab_path = str(path)
+        logger.info("DNGLab initialized at %s", path)
+
+    def set_dnglab_path(self, path: str) -> bool:
+        candidate = Path(path)
+        valid, _message = validate_dnglab(candidate)
+        if not valid:
+            return False
+        self.dnglab_backend = DNGLabBackend(candidate)
+        self.config.dnglab_path = str(candidate)
+        return True
 
     def extract(
         self,
@@ -56,9 +83,20 @@ class Extractor:
         self._worker_thread.start()
 
     def cancel(self) -> None:
-        """Signal cancellation of ongoing extraction."""
         self._cancel_event.set()
         logger.info("Extraction cancellation requested")
+
+    def _get_backend(self, job: ExtractionJob):
+        output_format = (job.output_format or self.config.output_format or "dng").lower()
+        if output_format == "cr3":
+            return self.native_backend
+        if output_format == "dng":
+            if self.dnglab_backend is None:
+                raise DNGLabError(
+                    "DNG output requires dnglab. Set a valid dnglab path in Settings."
+                )
+            return self.dnglab_backend
+        raise ValueError(f"Unsupported output format: {output_format}")
 
     def _extract_worker(
         self,
@@ -74,15 +112,16 @@ class Extractor:
                 job.error_message = "Cancelled"
                 return
 
+            backend = self._get_backend(job)
             if job.frame_indices:
-                extracted = self.native_backend.extract_frame_range(
+                extracted = backend.extract_frame_range(
                     job.burst_file.path,
                     job.output_dir,
                     job.frame_indices,
                     progress_callback,
                 )
             else:
-                extracted = self.native_backend.extract_all_frames(
+                extracted = backend.extract_all_frames(
                     job.burst_file.path,
                     job.output_dir,
                     progress_callback,
@@ -93,7 +132,7 @@ class Extractor:
             job.status = "completed"
             job.progress = 1.0
 
-        except NativeCR3Error as exc:
+        except (NativeCR3Error, DNGLabError, ValueError) as exc:
             job.status = "failed"
             job.error_message = str(exc)
             logger.error("Extraction failed: %s", exc)
@@ -125,15 +164,16 @@ class Extractor:
 
             job.status = "running"
             try:
+                backend = self._get_backend(job)
                 if job.frame_indices:
-                    extracted = self.native_backend.extract_frame_range(
+                    extracted = backend.extract_frame_range(
                         job.burst_file.path,
                         job.output_dir,
                         job.frame_indices,
                         job_progress,
                     )
                 else:
-                    extracted = self.native_backend.extract_all_frames(
+                    extracted = backend.extract_all_frames(
                         job.burst_file.path,
                         job.output_dir,
                         job_progress,
@@ -142,7 +182,7 @@ class Extractor:
                 job.extracted_files = extracted
                 job.status = "completed"
                 job.progress = 1.0
-            except NativeCR3Error as exc:
+            except (NativeCR3Error, DNGLabError, ValueError) as exc:
                 job.status = "failed"
                 job.error_message = str(exc)
                 logger.error("Batch extraction failed for %s: %s", job.burst_file.filename, exc)

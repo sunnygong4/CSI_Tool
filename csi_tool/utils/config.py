@@ -10,6 +10,14 @@ logger = logging.getLogger(__name__)
 
 CONFIG_DIR = Path.home() / ".csi_tool"
 CONFIG_PATH = CONFIG_DIR / "config.json"
+VALID_OUTPUT_FORMATS = {"dng", "cr3"}
+
+
+def normalize_output_format(value: str | None) -> str:
+    """Return a supported output format code."""
+    if value in VALID_OUTPUT_FORMATS:
+        return value
+    return "dng"
 
 
 def get_default_config() -> AppConfig:
@@ -24,7 +32,9 @@ def load_config() -> AppConfig:
 
     try:
         data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-        return AppConfig(**{k: v for k, v in data.items() if hasattr(AppConfig, k)})
+        config = AppConfig(**{k: v for k, v in data.items() if hasattr(AppConfig, k)})
+        config.output_format = normalize_output_format(config.output_format)
+        return config
     except Exception as e:
         logger.warning("Failed to load config: %s. Using defaults.", e)
         return get_default_config()
@@ -35,6 +45,8 @@ def save_config(config: AppConfig) -> None:
     try:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         data = {
+            "dnglab_path": config.dnglab_path,
+            "output_format": normalize_output_format(config.output_format),
             "default_output_dir": config.default_output_dir,
             "output_subfolder_per_burst": config.output_subfolder_per_burst,
             "output_naming": config.output_naming,
