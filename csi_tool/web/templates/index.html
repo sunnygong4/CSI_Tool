@@ -8,99 +8,95 @@
 </head>
 <body>
     <main class="page-shell">
-        <header class="site-topbar">
-            <a class="brand-link" href="https://sunnygong.com" target="_blank" rel="noreferrer">
+        <header class="site-header">
+            <a class="site-logo-link" href="https://sunnygong.com" target="_blank" rel="noreferrer" aria-label="Visit sunnygong.com">
                 <img
-                    class="brand-mark"
+                    class="site-logo"
                     src="{{ request.url_for('static', path='sunny-logo.png') }}"
-                    alt="Sunny Gong logo"
-                >
-                <img
-                    class="brand-wordmark"
-                    src="{{ request.url_for('static', path='sunny-wordmark.png') }}"
                     alt="Sunny Gong"
                 >
             </a>
-            <a class="site-link" href="https://sunnygong.com" target="_blank" rel="noreferrer">Visit main site</a>
         </header>
 
-        <section class="hero">
-            <h1>Sunny's CSI extraction tool:</h1>
-            <p class="hero-copy">This tool converts Raw bursted CR3 files into lightroom capable Adobe DNG files.</p>
-        </section>
-
-        <section class="panel-grid">
-            <section class="panel upload-panel">
-                <div class="panel-header">
-                    <div>
-                        <h2>Upload burst file</h2>
-                    </div>
-                </div>
-
-                <form id="upload-form" class="upload-form" data-max-upload-bytes="{{ max_upload_bytes }}">
-                    <label class="field">
-                        <span>Source file</span>
-                        <input id="source-file" type="file" accept=".CR3,.cr3" required>
-                    </label>
-
-                    <label class="field">
-                        <span>Output format</span>
-                        <select id="output-format">
-                            <option value="dng" {% if default_format == "dng" %}selected{% endif %}>Adobe DNG</option>
-                            <option value="cr3" {% if default_format == "cr3" %}selected{% endif %}>Canon CR3</option>
-                        </select>
-                    </label>
-
-                    <div class="form-actions">
-                        <button id="start-button" class="primary-button" type="submit">Start Extraction</button>
-                        <p id="form-hint" class="form-hint">Adobe DNG is the recommended Lightroom option.</p>
-                    </div>
-                </form>
+        <section class="panel app-panel">
+            <section class="hero">
+                <h1>Sunny's CSI extraction tool:</h1>
+                <p class="hero-copy">This tool converts Raw bursted CR3 files into lightroom capable Adobe DNG files.</p>
             </section>
 
-            <section class="panel status-panel">
-                <div class="panel-header">
-                    <div>
-                        <h2>Job status</h2>
+            <section class="panel-grid">
+                <section class="upload-panel">
+                    <div class="panel-header">
+                        <div>
+                            <h2>Upload burst file</h2>
+                        </div>
                     </div>
-                    <span id="status-badge" class="status-badge idle">Idle</span>
-                </div>
 
-                <div class="status-stack">
-                    <div class="status-line">
-                        <span class="status-label">Job ID</span>
-                        <code id="job-id">Not started</code>
-                    </div>
-                    <div class="status-line">
-                        <span class="status-label">Format</span>
-                        <span id="job-format">Adobe DNG</span>
-                    </div>
-                    <div class="status-line">
-                        <span class="status-label">Frames</span>
-                        <span id="job-frames">Unknown</span>
-                    </div>
-                    <div class="status-line">
-                        <span class="status-label">Expires</span>
-                        <span id="job-expiry">Not started</span>
-                    </div>
-                </div>
+                    <form id="upload-form" class="upload-form" data-max-upload-bytes="{{ max_upload_bytes }}">
+                        <label class="field">
+                            <span>Source file</span>
+                            <input id="source-file" type="file" accept=".CR3,.cr3" required>
+                        </label>
 
-                <div class="progress-shell" aria-live="polite">
-                    <div class="progress-bar">
-                        <div id="progress-fill" class="progress-fill"></div>
-                    </div>
-                    <div class="progress-meta">
-                        <strong id="progress-percent">0%</strong>
-                        <span id="progress-message">Waiting for a new upload.</span>
-                    </div>
-                </div>
+                        <label class="field">
+                            <span>Output format</span>
+                            <select id="output-format">
+                                <option value="dng" {% if default_format == "dng" %}selected{% endif %}>Adobe DNG</option>
+                                <option value="cr3" {% if default_format == "cr3" %}selected{% endif %}>Canon CR3</option>
+                            </select>
+                        </label>
 
-                <div id="error-box" class="error-box hidden"></div>
+                        <div class="form-actions">
+                            <button id="start-button" class="primary-button" type="submit">Start Extraction</button>
+                            <p id="form-hint" class="form-hint">Adobe DNG is the recommended Lightroom option.</p>
+                        </div>
+                    </form>
+                </section>
 
-                <div class="status-actions">
-                    <button id="download-button" class="secondary-button" type="button" disabled>Download ZIP</button>
-                    <button id="reset-button" class="ghost-button" type="button">Reset</button>
-                </div>
+                <section class="status-panel">
+                    <div class="panel-header">
+                        <div>
+                            <h2>Job status</h2>
+                        </div>
+                        <span id="status-badge" class="status-badge idle">Idle</span>
+                    </div>
+
+                    <div class="status-stack">
+                        <div class="status-line">
+                            <span class="status-label">Job ID</span>
+                            <code id="job-id">Not started</code>
+                        </div>
+                        <div class="status-line">
+                            <span class="status-label">Format</span>
+                            <span id="job-format">Adobe DNG</span>
+                        </div>
+                        <div class="status-line">
+                            <span class="status-label">Frames</span>
+                            <span id="job-frames">Unknown</span>
+                        </div>
+                        <div class="status-line">
+                            <span class="status-label">Expires</span>
+                            <span id="job-expiry">Not started</span>
+                        </div>
+                    </div>
+
+                    <div class="progress-shell" aria-live="polite">
+                        <div class="progress-bar">
+                            <div id="progress-fill" class="progress-fill"></div>
+                        </div>
+                        <div class="progress-meta">
+                            <strong id="progress-percent">0%</strong>
+                            <span id="progress-message">Waiting for a new upload.</span>
+                        </div>
+                    </div>
+
+                    <div id="error-box" class="error-box hidden"></div>
+
+                    <div class="status-actions">
+                        <button id="download-button" class="secondary-button" type="button" disabled>Download ZIP</button>
+                        <button id="reset-button" class="ghost-button" type="button">Reset</button>
+                    </div>
+                </section>
             </section>
         </section>
     </main>

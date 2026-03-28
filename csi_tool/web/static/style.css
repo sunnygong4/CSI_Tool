@@ -42,58 +42,39 @@ a {
     padding: 28px 0 48px;
 }
 
-.site-topbar {
+.site-header {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
-    gap: 16px;
-    padding: 14px 18px;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    background: rgba(14, 22, 35, 0.56);
-    backdrop-filter: blur(14px);
-    box-shadow: var(--shadow);
+    margin-bottom: 18px;
 }
 
-.brand-link {
+.site-logo-link {
     display: inline-flex;
     align-items: center;
-    gap: 12px;
-    min-width: 0;
+    justify-content: center;
+    border-radius: 18px;
+    transition: transform 160ms ease, opacity 160ms ease;
 }
 
-.brand-mark {
-    width: 44px;
-    height: 44px;
-    object-fit: contain;
-    flex: 0 0 auto;
+.site-logo-link:hover,
+.site-logo-link:focus-visible {
+    transform: translateY(-1px);
+    opacity: 0.94;
 }
 
-.brand-wordmark {
-    width: min(220px, 42vw);
+.site-logo {
+    width: clamp(92px, 11vw, 128px);
     height: auto;
 }
 
-.site-link {
-    padding: 10px 14px;
-    border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(255, 255, 255, 0.06);
-    color: var(--muted);
-    font-size: 0.95rem;
-    transition: background 160ms ease, transform 160ms ease, color 160ms ease;
-}
-
-.site-link:hover,
-.site-link:focus-visible {
-    color: var(--text);
-    background: rgba(119, 197, 255, 0.14);
-    transform: translateY(-1px);
+.app-panel {
+    padding: 28px;
 }
 
 .hero {
-    padding: 44px 10px 28px;
-    text-align: center;
+    padding: 4px 0 28px;
+    text-align: left;
 }
 
 .hero h1 {
@@ -104,8 +85,8 @@ a {
 }
 
 .hero-copy {
-    margin: 14px auto 0;
-    max-width: 720px;
+    margin: 14px 0 0;
+    max-width: 680px;
     color: var(--muted);
     font-size: 1.08rem;
     line-height: 1.6;
@@ -115,15 +96,6 @@ a {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(320px, 0.9fr);
     gap: 18px;
-}
-
-.panel {
-    padding: 24px;
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--border);
-    background: var(--surface);
-    backdrop-filter: blur(16px);
-    box-shadow: var(--shadow);
 }
 
 .panel-header {
@@ -137,6 +109,21 @@ a {
     margin: 0;
     font-family: Georgia, "Times New Roman", serif;
     font-size: 1.5rem;
+}
+
+.app-panel,
+.upload-panel,
+.status-panel {
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    backdrop-filter: blur(16px);
+    box-shadow: var(--shadow);
+}
+
+.upload-panel,
+.status-panel {
+    padding: 24px;
 }
 
 .upload-form,
@@ -329,28 +316,18 @@ a {
         padding-top: 18px;
     }
 
-    .site-topbar,
     .panel-grid,
     .status-actions {
         grid-template-columns: 1fr;
     }
 
-    .site-topbar {
-        display: grid;
-        justify-items: center;
-        border-radius: 24px;
-        text-align: center;
-    }
-
-    .brand-link {
-        flex-direction: column;
-    }
-
-    .brand-wordmark {
-        width: min(250px, 62vw);
-    }
-
-    .panel {
+    .app-panel,
+    .upload-panel,
+    .status-panel {
         padding: 20px;
+    }
+
+    .hero {
+        text-align: left;
     }
 }
