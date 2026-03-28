@@ -8,37 +8,33 @@
 </head>
 <body>
     <main class="page-shell">
+        <header class="site-topbar">
+            <a class="brand-link" href="https://sunnygong.com" target="_blank" rel="noreferrer">
+                <img
+                    class="brand-mark"
+                    src="{{ request.url_for('static', path='sunny-logo.png') }}"
+                    alt="Sunny Gong logo"
+                >
+                <img
+                    class="brand-wordmark"
+                    src="{{ request.url_for('static', path='sunny-wordmark.png') }}"
+                    alt="Sunny Gong"
+                >
+            </a>
+            <a class="site-link" href="https://sunnygong.com" target="_blank" rel="noreferrer">Visit main site</a>
+        </header>
+
         <section class="hero">
-            <p class="eyebrow">Ubuntu Web Utility</p>
-            <h1>Turn Canon burst CSI files into a clean downloadable ZIP.</h1>
-            <p class="hero-copy">
-                Upload one Canon `.CR3` burst file, let the server extract every frame,
-                and download a ZIP of `Adobe DNG` or `Canon CR3` outputs.
-            </p>
-            <div class="hero-notes">
-                <div class="hero-note">
-                    <span class="note-label">Domain</span>
-                    <span class="note-value">{{ domain_name }}</span>
-                </div>
-                <div class="hero-note">
-                    <span class="note-label">Upload Limit</span>
-                    <span class="note-value">{{ max_upload_label }}</span>
-                </div>
-                <div class="hero-note">
-                    <span class="note-label">Auto Cleanup</span>
-                    <span class="note-value">{{ job_ttl_minutes }} min or first download</span>
-                </div>
-            </div>
+            <h1>Sunny's CSI extraction tool:</h1>
+            <p class="hero-copy">This tool converts Raw bursted CR3 files into lightroom capable Adobe DNG files.</p>
         </section>
 
         <section class="panel-grid">
             <section class="panel upload-panel">
                 <div class="panel-header">
                     <div>
-                        <p class="panel-kicker">New Job</p>
                         <h2>Upload burst file</h2>
                     </div>
-                    <span class="storage-pill">{{ storage_backend|upper }} storage</span>
                 </div>
 
                 <form id="upload-form" class="upload-form" data-max-upload-bytes="{{ max_upload_bytes }}">
@@ -55,20 +51,9 @@
                         </select>
                     </label>
 
-                    <div class="format-callouts">
-                        <article class="format-card format-card-primary">
-                            <h3>Adobe DNG</h3>
-                            <p>Default path for Lightroom-friendly output and easier sharing.</p>
-                        </article>
-                        <article class="format-card">
-                            <h3>Canon CR3</h3>
-                            <p>Keep extracted frames in Canon raw format when you want original-style containers.</p>
-                        </article>
-                    </div>
-
                     <div class="form-actions">
                         <button id="start-button" class="primary-button" type="submit">Start Extraction</button>
-                        <p id="form-hint" class="form-hint">Only one active job per IP. Keep this page open while the worker runs.</p>
+                        <p id="form-hint" class="form-hint">Adobe DNG is the recommended Lightroom option.</p>
                     </div>
                 </form>
             </section>
@@ -76,8 +61,7 @@
             <section class="panel status-panel">
                 <div class="panel-header">
                     <div>
-                        <p class="panel-kicker">Job Status</p>
-                        <h2>Live progress</h2>
+                        <h2>Job status</h2>
                     </div>
                     <span id="status-badge" class="status-badge idle">Idle</span>
                 </div>
