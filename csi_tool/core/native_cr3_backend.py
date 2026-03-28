@@ -29,6 +29,16 @@ SOF_MARKERS = {
     0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7,
     0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF,
 }
+TIFF_TYPE_SIZES = {
+    1: 1,
+    2: 1,
+    3: 2,
+    4: 4,
+    5: 8,
+    7: 1,
+    9: 4,
+    10: 8,
+}
 
 
 class NativeCR3Error(Exception):
@@ -468,12 +478,11 @@ class _BurstCR3File:
         iso_value = 0
         if image_index < len(self.exposure_data):
             iso_value = self.exposure_data[image_index].get("iso", 0)
-        if not iso_value or len(cmt2_raw) < 16:
+        if len(cmt2_raw) < 16:
             return cmt2_raw
 
-        patched = bytearray(cmt2_raw)
-        tiff_start = 8
-        byte_order = patched[tiff_start:tiff_start + 2]
+        tiff = bytearray(cmt2_raw[8:])
+        byte_order = tiff[0:2]
         if byte_order == b"II":
             fmt16 = "<H"
             fmt32 = "<I"
@@ -483,23 +492,77 @@ class _BurstCR3File:
         else:
             return cmt2_raw
 
-        ifd_offset = struct.unpack(fmt32, patched[tiff_start + 4:tiff_start + 8])[0]
-        ifd_abs = tiff_start + ifd_offset
-        if ifd_abs + 2 > len(patched):
+        ifd_offset = struct.unpack(fmt32, tiff[4:8])[0]
+        if ifd_offset + 2 > len(tiff):
             return cmt2_raw
 
-        entry_count = struct.unpack(fmt16, patched[ifd_abs:ifd_abs + 2])[0]
+        entry_count = struct.unpack(fmt16, tiff[ifd_offset:ifd_offset + 2])[0]
+        entries_start = ifd_offset + 2
+        next_ifd_offset = entries_start + entry_count * 12
+        if next_ifd_offset + 4 > len(tiff):
+            return cmt2_raw
+
+        entries = []
         for entry_index in range(entry_count):
-            entry_offset = ifd_abs + 2 + entry_index * 12
-            if entry_offset + 12 > len(patched):
+            entry_offset = entries_start + entry_index * 12
+            if entry_offset + 12 > len(tiff):
                 break
-            tag = struct.unpack(fmt16, patched[entry_offset:entry_offset + 2])[0]
-            value_offset = entry_offset + 8
-            if tag == 0x8827:
-                patched[value_offset:value_offset + 4] = struct.pack(fmt16, iso_value) + b"\x00\x00"
-            elif tag == 0x8832:
-                patched[value_offset:value_offset + 4] = struct.pack(fmt32, iso_value)
-        return bytes(patched)
+            tag = struct.unpack(fmt16, tiff[entry_offset:entry_offset + 2])[0]
+            value_type = struct.unpack(fmt16, tiff[entry_offset + 2:entry_offset + 4])[0]
+            count = struct.unpack(fmt32, tiff[entry_offset + 4:entry_offset + 8])[0]
+            value_raw = bytes(tiff[entry_offset + 8:entry_offset + 12])
+            entries.append([tag, value_type, count, value_raw])
+
+        next_ifd_ptr = bytes(tiff[next_ifd_offset:next_ifd_offset + 4])
+        data_area_start = next_ifd_offset + 4
+        data_area = bytes(tiff[data_area_start:])
+        zero_padding = len(data_area) - len(data_area.rstrip(b"\x00"))
+
+        has_digital_zoom_ratio = any(entry[0] == 0xA404 for entry in entries)
+        can_insert_zoom_ratio = not has_digital_zoom_ratio and zero_padding >= 20
+        offset_shift = 12 if can_insert_zoom_ratio else 0
+        new_data_area_start = data_area_start + offset_shift
+        new_data_area = bytearray(data_area[:-offset_shift] if offset_shift else data_area)
+
+        if can_insert_zoom_ratio and len(new_data_area) >= 8:
+            new_data_area[-8:] = struct.pack(fmt32, 65535) + struct.pack(fmt32, 65535)
+            rational_offset = new_data_area_start + len(new_data_area) - 8
+            entries.append([0xA404, 5, 1, struct.pack(fmt32, rational_offset)])
+
+        if iso_value:
+            for entry in entries:
+                tag, value_type, count, value_raw = entry
+                if tag == 0x8827 and value_type == 3 and count == 1:
+                    entry[3] = struct.pack(fmt16, min(iso_value, 0xFFFF)) + b"\x00\x00"
+                elif tag == 0x8832 and value_type == 4 and count == 1:
+                    entry[3] = struct.pack(fmt32, iso_value)
+
+        if offset_shift:
+            for entry in entries:
+                tag, value_type, count, value_raw = entry
+                data_size = TIFF_TYPE_SIZES.get(value_type, 1) * count
+                if data_size > 4 and tag != 0xA404:
+                    old_offset = struct.unpack(fmt32, value_raw)[0]
+                    entry[3] = struct.pack(fmt32, old_offset + offset_shift)
+
+        entries.sort(key=lambda item: item[0])
+        header = bytes(tiff[:ifd_offset])
+        new_tiff = bytearray()
+        new_tiff.extend(header)
+        new_tiff.extend(struct.pack(fmt16, len(entries)))
+        for tag, value_type, count, value_raw in entries:
+            new_tiff.extend(struct.pack(fmt16, tag))
+            new_tiff.extend(struct.pack(fmt16, value_type))
+            new_tiff.extend(struct.pack(fmt32, count))
+            new_tiff.extend(value_raw)
+        new_tiff.extend(next_ifd_ptr)
+        new_tiff.extend(new_data_area)
+
+        result = cmt2_raw[:8] + bytes(new_tiff)
+        if len(result) != len(cmt2_raw):
+            logger.warning("CMT2 size changed unexpectedly (%d -> %d); keeping original block", len(cmt2_raw), len(result))
+            return cmt2_raw
+        return result
 
     def _patch_cmt3(self, cmt3_raw: bytes) -> bytes:
         if len(cmt3_raw) < 16:
@@ -663,10 +726,14 @@ class _BurstCR3File:
                 if marker >= 4:
                     subbox_offset = marker - 4
                     if subbox_offset + 20 <= len(content):
+                        original_size = _read_u32be(content, subbox_offset)
+                        suffix = b""
+                        if original_size >= 8 and subbox_offset + original_size <= len(content):
+                            suffix = content[subbox_offset + original_size:]
                         prefix = content[:subbox_offset]
                         header = content[subbox_offset + 8:subbox_offset + 20]
                         prvw_subbox = _make_box("PRVW", header + _pack_u32be(len(jpeg_bytes)) + jpeg_bytes)
-                        return _make_uuid_box(PRVW_UUID, prefix + prvw_subbox)
+                        return _make_uuid_box(PRVW_UUID, prefix + prvw_subbox + suffix)
 
         dimensions = _jpeg_dimensions(jpeg_bytes)
         width, height = dimensions or (1620, 1080)
