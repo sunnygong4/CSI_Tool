@@ -138,6 +138,32 @@ class WebAppIntegrationTestCase(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 413)
 
+    def test_can_recover_latest_job_for_same_client(self) -> None:
+        initiated = self.client.post(
+            "/api/jobs/initiate",
+            json={
+                "filename": "burst.CR3",
+                "file_size": 4096,
+                "output_format": "dng",
+            },
+        )
+        self.assertEqual(initiated.status_code, 200)
+        payload = initiated.json()
+
+        upload_response = self.client.put(
+            payload["upload"]["url"],
+            content=b"fake-cr3-payload",
+            headers={"content-type": "application/octet-stream"},
+        )
+        self.assertEqual(upload_response.status_code, 200)
+
+        job_id = payload["job_id"]
+        self.client.post(f"/api/jobs/{job_id}/upload-complete", json={})
+
+        recovered = self.client.get("/api/jobs/recover")
+        self.assertEqual(recovered.status_code, 200)
+        self.assertEqual(recovered.json()["job_id"], job_id)
+
 
 if __name__ == "__main__":
     unittest.main()

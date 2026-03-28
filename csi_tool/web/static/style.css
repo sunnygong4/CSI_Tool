@@ -290,6 +290,14 @@ a {
     color: var(--muted);
 }
 
+.status-hint {
+    min-height: 1.2em;
+    margin: 10px 0 0;
+    color: rgba(247, 249, 252, 0.74);
+    font-size: 0.9rem;
+    line-height: 1.45;
+}
+
 .error-box {
     margin-top: 16px;
     padding: 14px 16px;

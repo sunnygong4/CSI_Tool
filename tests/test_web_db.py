@@ -82,6 +82,42 @@ class JobStoreTestCase(unittest.TestCase):
         self.assertEqual(updated.download_count, 1)
         self.assertEqual(updated.expires_at, now_ts + 120)
 
+    def test_recoverable_job_prefers_active_then_terminal(self) -> None:
+        now_ts = int(time.time())
+        self.store.create_job(
+            job_id="job-old",
+            client_ip_hash="ip-hash",
+            original_filename="older.CR3",
+            file_size=1024,
+            output_format="dng",
+            source_key="uploads/job-old/older.CR3",
+            created_at=now_ts - 30,
+            expires_at=now_ts + 3600,
+        )
+        self.store.mark_completed(
+            "job-old",
+            result_key="results/job-old/older_dng_frames.zip",
+            frame_count=4,
+            completed_at=now_ts - 20,
+            expires_at=now_ts + 3600,
+        )
+
+        self.store.create_job(
+            job_id="job-active",
+            client_ip_hash="ip-hash",
+            original_filename="newer.CR3",
+            file_size=1024,
+            output_format="dng",
+            source_key="uploads/job-active/newer.CR3",
+            created_at=now_ts,
+            expires_at=now_ts + 3600,
+        )
+        self.store.mark_uploaded("job-active", now_ts + 1)
+
+        recovered = self.store.get_recoverable_job_for_ip("ip-hash", now_ts + 2)
+        self.assertIsNotNone(recovered)
+        self.assertEqual(recovered.id, "job-active")
+
 
 if __name__ == "__main__":
     unittest.main()

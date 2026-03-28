@@ -1,4 +1,8 @@
 (function () {
+    const ACTIVE_JOB_STATUSES = new Set(["initiated", "uploaded", "processing"]);
+    const STORAGE_KEY = "csi-tool.current-job-id";
+    const STALE_HINT_AFTER_POLLS = 8;
+
     const form = document.getElementById("upload-form");
     const fileInput = document.getElementById("source-file");
     const formatInput = document.getElementById("output-format");
@@ -13,15 +17,22 @@
     const progressFill = document.getElementById("progress-fill");
     const progressPercent = document.getElementById("progress-percent");
     const progressMessage = document.getElementById("progress-message");
+    const statusHint = document.getElementById("status-hint");
     const errorBox = document.getElementById("error-box");
 
     const maxUploadBytes = Number(form.dataset.maxUploadBytes || "0");
     let currentJobId = null;
     let pollingHandle = null;
+    let lastProgressSignature = "";
+    let stalePollCount = 0;
 
     function setBadge(label, className) {
         badge.textContent = label;
         badge.className = "status-badge " + className;
+    }
+
+    function setStatusHint(message) {
+        statusHint.textContent = message || "";
     }
 
     function showError(message) {
@@ -32,6 +43,32 @@
     function clearError() {
         errorBox.textContent = "";
         errorBox.classList.add("hidden");
+    }
+
+    function saveCurrentJobId(jobId) {
+        try {
+            if (jobId) {
+                window.localStorage.setItem(STORAGE_KEY, jobId);
+            }
+        } catch (_error) {
+            // Ignore storage failures; the page can still function without persistence.
+        }
+    }
+
+    function loadCurrentJobId() {
+        try {
+            return window.localStorage.getItem(STORAGE_KEY);
+        } catch (_error) {
+            return null;
+        }
+    }
+
+    function clearCurrentJobId() {
+        try {
+            window.localStorage.removeItem(STORAGE_KEY);
+        } catch (_error) {
+            // Ignore storage failures.
+        }
     }
 
     function humanSize(bytes) {
@@ -61,11 +98,19 @@
         formatInput.disabled = isBusy;
     }
 
-    function resetView() {
-        currentJobId = null;
+    function stopPolling() {
         if (pollingHandle) {
             clearInterval(pollingHandle);
             pollingHandle = null;
+        }
+    }
+
+    function resetView(options) {
+        const clearStoredJob = !options || options.clearStoredJob !== false;
+        currentJobId = null;
+        stopPolling();
+        if (clearStoredJob) {
+            clearCurrentJobId();
         }
         form.reset();
         progressFill.style.width = "0%";
@@ -77,11 +122,32 @@
         jobExpiryEl.textContent = "Not started";
         downloadButton.disabled = true;
         clearError();
+        setStatusHint("");
         setBusy(false);
         setBadge("Idle", "idle");
+        lastProgressSignature = "";
+        stalePollCount = 0;
+    }
+
+    function updateStaleHint(job) {
+        const signature = [job.status, job.progress_pct || 0, job.progress_message || ""].join("|");
+        if (signature === lastProgressSignature) {
+            stalePollCount += 1;
+        } else {
+            stalePollCount = 0;
+            lastProgressSignature = signature;
+        }
+
+        if (ACTIVE_JOB_STATUSES.has(job.status) && stalePollCount >= STALE_HINT_AFTER_POLLS) {
+            setStatusHint("Still working. Large DNG burst jobs can stay on one frame for a while.");
+            return;
+        }
+        setStatusHint("");
     }
 
     function applyJobState(job) {
+        currentJobId = job.job_id;
+        saveCurrentJobId(job.job_id);
         jobIdEl.textContent = job.job_id;
         jobFormatEl.textContent = job.output_format_label;
         jobFramesEl.textContent = job.frame_count || "Unknown";
@@ -89,6 +155,7 @@
         progressFill.style.width = String(job.progress_pct || 0) + "%";
         progressPercent.textContent = String(job.progress_pct || 0) + "%";
         progressMessage.textContent = job.progress_message || "Working...";
+        updateStaleHint(job);
 
         if (job.status === "completed") {
             setBadge("Ready", "done");
@@ -101,15 +168,20 @@
             setBusy(false);
             downloadButton.disabled = true;
             showError(job.error_message || "This job failed.");
-            if (pollingHandle) {
-                clearInterval(pollingHandle);
-                pollingHandle = null;
-            }
+            stopPolling();
             return;
         }
 
         setBadge("Running", "running");
         downloadButton.disabled = true;
+    }
+
+    async function safeJson(response) {
+        try {
+            return await response.json();
+        } catch (_error) {
+            return {};
+        }
     }
 
     async function apiJson(url, options) {
@@ -122,14 +194,6 @@
             throw new Error(payload.detail || payload.message || "Request failed.");
         }
         return response.json();
-    }
-
-    async function safeJson(response) {
-        try {
-            return await response.json();
-        } catch (_error) {
-            return {};
-        }
     }
 
     async function uploadSource(uploadConfig, file) {
@@ -149,30 +213,73 @@
         }
     }
 
-    function startPolling(jobId) {
-        if (pollingHandle) {
-            clearInterval(pollingHandle);
+    async function fetchAndApplyJob(jobId) {
+        const job = await apiJson("/api/jobs/" + encodeURIComponent(jobId));
+        clearError();
+        applyJobState(job);
+        if (ACTIVE_JOB_STATUSES.has(job.status)) {
+            setBusy(true);
+            startPolling(jobId);
+        } else {
+            stopPolling();
         }
+        return job;
+    }
+
+    function startPolling(jobId) {
+        stopPolling();
         pollingHandle = setInterval(async function () {
             try {
                 const job = await apiJson("/api/jobs/" + encodeURIComponent(jobId));
+                clearError();
                 applyJobState(job);
-                if (job.status === "completed" || job.status === "failed") {
-                    clearInterval(pollingHandle);
-                    pollingHandle = null;
+                if (!ACTIVE_JOB_STATUSES.has(job.status)) {
+                    stopPolling();
                 }
             } catch (error) {
-                clearInterval(pollingHandle);
-                pollingHandle = null;
+                stopPolling();
                 setBusy(false);
                 showError(error.message);
             }
         }, 2500);
     }
 
+    async function recoverJobState() {
+        const storedJobId = loadCurrentJobId();
+        setBusy(true);
+        setBadge("Recovering", "running");
+        progressMessage.textContent = "Reconnecting to your last job...";
+
+        if (storedJobId) {
+            try {
+                await fetchAndApplyJob(storedJobId);
+                return;
+            } catch (_error) {
+                clearCurrentJobId();
+            }
+        }
+
+        try {
+            const job = await apiJson("/api/jobs/recover");
+            clearError();
+            applyJobState(job);
+            if (ACTIVE_JOB_STATUSES.has(job.status)) {
+                setBusy(true);
+                startPolling(job.job_id);
+            } else {
+                setBusy(false);
+            }
+        } catch (_error) {
+            resetView({ clearStoredJob: true });
+        }
+    }
+
     form.addEventListener("submit", async function (event) {
         event.preventDefault();
         clearError();
+        setStatusHint("");
+        lastProgressSignature = "";
+        stalePollCount = 0;
 
         const file = fileInput.files && fileInput.files[0];
         if (!file) {
@@ -206,6 +313,7 @@
             });
 
             currentJobId = initiated.job_id;
+            saveCurrentJobId(currentJobId);
             jobIdEl.textContent = currentJobId;
             jobExpiryEl.textContent = formatExpiry(initiated.expires_at);
             progressMessage.textContent = "Uploading source file...";
@@ -222,7 +330,9 @@
                 body: "{}",
             });
             applyJobState(job);
-            startPolling(currentJobId);
+            if (ACTIVE_JOB_STATUSES.has(job.status)) {
+                startPolling(currentJobId);
+            }
         } catch (error) {
             setBadge("Failed", "error");
             setBusy(false);
@@ -247,8 +357,9 @@
     });
 
     resetButton.addEventListener("click", function () {
-        resetView();
+        resetView({ clearStoredJob: true });
     });
 
-    resetView();
+    resetView({ clearStoredJob: false });
+    void recoverJobState();
 })();

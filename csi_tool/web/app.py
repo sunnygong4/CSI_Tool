@@ -219,6 +219,15 @@ def create_app(config: WebConfig | None = None) -> FastAPI:
             raise HTTPException(status_code=409, detail="Job upload state changed unexpectedly.")
         return _serialize_job(updated)
 
+    @app.get("/api/jobs/recover")
+    async def recover_job(request: Request):
+        services_local = _services(request)
+        client_ip_hash = hash_client_ip(_client_ip(request), services_local.config.effective_ip_salt)
+        job = services_local.store.get_recoverable_job_for_ip(client_ip_hash, int(time.time()))
+        if job is None:
+            raise HTTPException(status_code=404, detail="No recoverable job found for this browser.")
+        return _serialize_job(job)
+
     @app.get("/api/jobs/{job_id}")
     async def get_job(job_id: str, request: Request):
         job = _services(request).store.get_job(job_id)

@@ -8,6 +8,7 @@ from pathlib import Path
 
 
 ACTIVE_JOB_STATUSES = ("initiated", "uploaded", "processing")
+RECOVERABLE_TERMINAL_STATUSES = ("completed",)
 
 
 @dataclass(slots=True)
@@ -160,6 +161,42 @@ class JobStore:
                 (client_ip_hash, *ACTIVE_JOB_STATUSES),
             ).fetchone()
         return row is not None
+
+    def get_recoverable_job_for_ip(self, client_ip_hash: str, now_ts: int) -> JobRecord | None:
+        """Return the most relevant unexpired job for a client IP."""
+        active_placeholders = ", ".join("?" for _ in ACTIVE_JOB_STATUSES)
+        terminal_placeholders = ", ".join("?" for _ in RECOVERABLE_TERMINAL_STATUSES)
+
+        with self._connect() as conn:
+            active_row = conn.execute(
+                f"""
+                SELECT *
+                FROM jobs
+                WHERE client_ip_hash = ?
+                  AND expires_at > ?
+                  AND status IN ({active_placeholders})
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (client_ip_hash, now_ts, *ACTIVE_JOB_STATUSES),
+            ).fetchone()
+            if active_row is not None:
+                return self._row_to_job(active_row)
+
+            terminal_row = conn.execute(
+                f"""
+                SELECT *
+                FROM jobs
+                WHERE client_ip_hash = ?
+                  AND expires_at > ?
+                  AND status IN ({terminal_placeholders})
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (client_ip_hash, now_ts, *RECOVERABLE_TERMINAL_STATUSES),
+            ).fetchone()
+
+        return self._row_to_job(terminal_row) if terminal_row is not None else None
 
     def mark_uploaded(self, job_id: str, uploaded_at: int) -> JobRecord | None:
         """Move a job from initiated to uploaded."""
