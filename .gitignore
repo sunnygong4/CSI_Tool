@@ -6,3 +6,5 @@ resume.md
 
 dnglab-win-x64_v0.7.2/
 _tmp_test/
+.env
+data/

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CSI Tool Web</title>
+    <link rel="stylesheet" href="{{ request.url_for('static', path='style.css') }}">
+</head>
+<body>
+    <main class="page-shell">
+        <section class="hero">
+            <p class="eyebrow">Ubuntu Web Utility</p>
+            <h1>Turn Canon burst CSI files into a clean downloadable ZIP.</h1>
+            <p class="hero-copy">
+                Upload one Canon `.CR3` burst file, let the server extract every frame,
+                and download a ZIP of `Adobe DNG` or `Canon CR3` outputs.
+            </p>
+            <div class="hero-notes">
+                <div class="hero-note">
+                    <span class="note-label">Domain</span>
+                    <span class="note-value">{{ domain_name }}</span>
+                </div>
+                <div class="hero-note">
+                    <span class="note-label">Upload Limit</span>
+                    <span class="note-value">{{ max_upload_label }}</span>
+                </div>
+                <div class="hero-note">
+                    <span class="note-label">Auto Cleanup</span>
+                    <span class="note-value">{{ job_ttl_minutes }} min or first download</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel-grid">
+            <section class="panel upload-panel">
+                <div class="panel-header">
+                    <div>
+                        <p class="panel-kicker">New Job</p>
+                        <h2>Upload burst file</h2>
+                    </div>
+                    <span class="storage-pill">{{ storage_backend|upper }} storage</span>
+                </div>
+
+                <form id="upload-form" class="upload-form" data-max-upload-bytes="{{ max_upload_bytes }}">
+                    <label class="field">
+                        <span>Source file</span>
+                        <input id="source-file" type="file" accept=".CR3,.cr3" required>
+                    </label>
+
+                    <label class="field">
+                        <span>Output format</span>
+                        <select id="output-format">
+                            <option value="dng" {% if default_format == "dng" %}selected{% endif %}>Adobe DNG</option>
+                            <option value="cr3" {% if default_format == "cr3" %}selected{% endif %}>Canon CR3</option>
+                        </select>
+                    </label>
+
+                    <div class="format-callouts">
+                        <article class="format-card format-card-primary">
+                            <h3>Adobe DNG</h3>
+                            <p>Default path for Lightroom-friendly output and easier sharing.</p>
+                        </article>
+                        <article class="format-card">
+                            <h3>Canon CR3</h3>
+                            <p>Keep extracted frames in Canon raw format when you want original-style containers.</p>
+                        </article>
+                    </div>
+
+                    <div class="form-actions">
+                        <button id="start-button" class="primary-button" type="submit">Start Extraction</button>
+                        <p id="form-hint" class="form-hint">Only one active job per IP. Keep this page open while the worker runs.</p>
+                    </div>
+                </form>
+            </section>
+
+            <section class="panel status-panel">
+                <div class="panel-header">
+                    <div>
+                        <p class="panel-kicker">Job Status</p>
+                        <h2>Live progress</h2>
+                    </div>
+                    <span id="status-badge" class="status-badge idle">Idle</span>
+                </div>
+
+                <div class="status-stack">
+                    <div class="status-line">
+                        <span class="status-label">Job ID</span>
+                        <code id="job-id">Not started</code>
+                    </div>
+                    <div class="status-line">
+                        <span class="status-label">Format</span>
+                        <span id="job-format">Adobe DNG</span>
+                    </div>
+                    <div class="status-line">
+                        <span class="status-label">Frames</span>
+                        <span id="job-frames">Unknown</span>
+                    </div>
+                    <div class="status-line">
+                        <span class="status-label">Expires</span>
+                        <span id="job-expiry">Not started</span>
+                    </div>
+                </div>
+
+                <div class="progress-shell" aria-live="polite">
+                    <div class="progress-bar">
+                        <div id="progress-fill" class="progress-fill"></div>
+                    </div>
+                    <div class="progress-meta">
+                        <strong id="progress-percent">0%</strong>
+                        <span id="progress-message">Waiting for a new upload.</span>
+                    </div>
+                </div>
+
+                <div id="error-box" class="error-box hidden"></div>
+
+                <div class="status-actions">
+                    <button id="download-button" class="secondary-button" type="button" disabled>Download ZIP</button>
+                    <button id="reset-button" class="ghost-button" type="button">Reset</button>
+                </div>
+            </section>
+        </section>
+    </main>
+
+    <script src="{{ request.url_for('static', path='app.js') }}"></script>
+</body>
+</html>

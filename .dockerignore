@@ -1,0 +1,9 @@
+.git
+.gitignore
+.claude
+__pycache__
+*.py[cod]
+_tmp_test
+data
+dnglab-win-x64_v0.7.2
+resume.md

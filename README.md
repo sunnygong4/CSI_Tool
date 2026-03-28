@@ -1,73 +1,79 @@
 # CSI Tool
 
-Native Canon CR3 burst extractor with both a desktop GUI and a CLI.
+Canon burst `.CR3` extractor with three delivery paths:
 
-CSI Tool opens Canon raw burst or roll `.CR3` files, parses the ISOBMFF container directly, and rebuilds each frame as an individual raw `.CR3` file. The current version does this with a built-in Python backend, so it no longer depends on `dnglab` for the main extraction workflow.
+- Tkinter desktop app
+- CLI for scripting and batch runs
+- Ubuntu web service for `csi.sunnygong.com`
 
-## Features
+The project parses Canon burst or roll containers directly, extracts each frame, and can output either:
 
-- Extracts individual raw `.CR3` files from Canon burst `.CR3` containers
-- Includes a Tkinter desktop app for browsing and batch extraction
-- Includes a CLI for automation and scripting
-- Parses burst metadata without loading the full file into memory at once
-- Rebuilds per-frame CR3 containers with updated sample tables and Canon metadata
-- Preserves a clean frame naming scheme like `FILE_frame_0001.cr3`
+- `Adobe DNG` as the default web/Desktop workflow
+- `Canon CR3` as the alternate raw-preserving workflow
 
-## Why This Exists
+## What The Web Service Does
 
-Canon burst files are not simple folders of embedded raws. They are ISO Base Media File Format containers that hold multiple image tracks and metadata tables inside a single `.CR3` file. Many tools either do not support these files well or convert them to another format first.
+The Ubuntu service is designed for a small public beta:
 
-CSI Tool is focused on a more direct workflow:
+1. The browser creates an extraction job.
+2. The source `.CR3` uploads directly to Cloudflare R2.
+3. A background worker on Ubuntu downloads the burst file, extracts all frames, and builds a ZIP.
+4. The browser polls job status and receives a download link when the ZIP is ready.
+5. Source files, ZIPs, and temp workspaces are automatically cleaned up after download or TTL expiry.
 
-- detect burst files
-- inspect frame metadata
-- reconstruct each frame as a standalone raw CR3
+This avoids pushing 1 GB-class uploads through a normal Cloudflare proxied request path.
 
 ## Project Structure
 
-- `csi_tool/core/cr3_parser.py`
-  Parses burst structure and reports frame count, offsets, and image metadata.
-- `csi_tool/core/native_cr3_backend.py`
-  Native extractor that rebuilds single-image CR3 files from burst containers.
-- `csi_tool/core/extractor.py`
-  Orchestrates threaded extraction for the GUI and synchronous use in the CLI.
+- `csi_tool/core/`
+  CR3 parsing, native frame reconstruction, and DNG conversion backend wiring.
 - `csi_tool/gui/`
-  Desktop interface built with Tkinter.
-- `csi_tool/cli/cli.py`
-  Command-line entry points for file inspection and extraction.
+  Desktop Tkinter application.
+- `csi_tool/cli/`
+  CLI commands for file inspection and extraction.
+- `csi_tool/web/`
+  FastAPI app, worker loop, SQLite job store, storage backends, templates, and static assets.
+- `docker-compose.yml`
+  Ubuntu deployment with separate `web` and `worker` services.
 
 ## Requirements
 
-- Windows with Python 3.11+
-- No third-party Python package is required for the core app
-- Tkinter must be available in the Python installation
+### Desktop / CLI
 
-`requirements.txt` is intentionally minimal because the active extraction path uses only the Python standard library.
+- Python 3.11+
+- Tkinter available in the Python install
 
-## Running The App
+### Ubuntu Web Service
 
-Launch the GUI:
+- Python 3.11+
+- `fastapi`, `uvicorn`, `jinja2`, `boto3`
+- Linux `dnglab` binary available in the container
+- Cloudflare R2 bucket and credentials for production uploads/results
+
+Install Python dependencies:
+
+```powershell
+py -m pip install -r requirements.txt
+```
+
+## Desktop And CLI Usage
+
+Launch the desktop app:
 
 ```powershell
 py -m csi_tool
 ```
 
-Show burst file info:
+Inspect a burst file:
 
 ```powershell
 py -m csi_tool info "C:\path\to\burst.CR3"
 ```
 
-Extract every frame as raw CR3:
+Extract every frame:
 
 ```powershell
 py -m csi_tool extract "C:\path\to\burst.CR3"
-```
-
-Extract selected frames:
-
-```powershell
-py -m csi_tool extract "C:\path\to\burst.CR3" --frames "1,3,5-10"
 ```
 
 Batch extract a folder:
@@ -76,50 +82,65 @@ Batch extract a folder:
 py -m csi_tool batch "C:\path\to\folder"
 ```
 
-## How It Works
+## Ubuntu Web Deployment
 
-At a high level the native backend:
+1. Copy `.env.example` to `.env`
+2. Fill in the Cloudflare R2 values and a valid Linux `dnglab` download URL
+3. Build and start the services:
 
-1. Opens the burst CR3 file as an ISOBMFF container.
-2. Reads top-level boxes like `ftyp`, `moov`, `mdat`, and Canon UUID boxes.
-3. Walks track metadata to find per-frame sample sizes and offsets.
-4. Extracts the sample data for one frame across the relevant tracks.
-5. Rebuilds a single-image `moov` box with one-sample `stsz`, `stsc`, `stts`, and `co64` tables.
-6. Writes a new CR3 file containing the rebuilt metadata plus the frame payload.
+```bash
+docker compose up --build -d
+```
 
-This is designed to keep the output in raw CR3 form instead of converting to DNG.
+The stack exposes:
 
-## Current Status
+- `web` on `127.0.0.1:${CSI_WEB_HOST_PORT}` with `6030` as the default host port
+- `worker` as the single-job background processor
 
-The current repository includes:
+Recommended production shape:
 
-- native raw CR3 extraction backend
-- GUI workflow for adding files, selecting output folders, and batch extraction
-- CLI workflow for info, single extraction, and directory batch extraction
-- compile and import smoke checks on the refactored codebase
+- Cloudflare Tunnel or reverse proxy points `csi.sunnygong.com` to `http://localhost:6030`
+- browser uploads go directly to R2 using presigned URLs
+- ZIP downloads also come from storage links instead of streaming through the app container
 
-## Notes And Limitations
+## Local Web Development
 
-- Canon burst variations differ by camera model and firmware, so some files may need additional tuning.
-- The extractor currently targets the burst container structure and metadata patterns observed in public reverse-engineering references and community examples.
-- Preview and some Canon-private metadata may differ slightly from Canon DPP-generated exports, but the main goal is usable standalone raw CR3 outputs.
+You can run the web app with local filesystem storage for development and tests:
 
-## References
+```bash
+CSI_WEB_STORAGE_BACKEND=local CSI_WEB_REQUIRE_DNGLAB=false python -m csi_tool.web
+```
 
-This project was informed by public reverse-engineering and community work around Canon burst CR3 support, especially:
+For the worker:
 
-- [AGFeldman/canon_burst_image_extract](https://github.com/AGFeldman/canon_burst_image_extract)
-- [lclevy/canon_cr3](https://github.com/lclevy/canon_cr3)
-- [Canon R6 II RAW Burst discussion on pixls.us](https://discuss.pixls.us/t/canon-r6-ii-raw-burst/45717)
+```bash
+CSI_WEB_STORAGE_BACKEND=local CSI_WEB_REQUIRE_DNGLAB=false python -m csi_tool.web.worker
+```
 
-## Development
+## Verification
 
-Compile the package to catch syntax issues:
+Compile the package:
 
 ```powershell
 & "C:\Users\sunny\AppData\Local\Programs\Python\Python311\python.exe" -m compileall csi_tool
 ```
 
+Test files for the web service live under `tests/`.
+
+## Notes And Limits
+
+- The web flow currently accepts one `.CR3` upload per job.
+- Default public-beta limits are one active job per IP and three job creations per hour.
+- The worker is intentionally single-concurrency in v1.
+- `Adobe DNG` is the recommended output for Lightroom workflows.
+- `Canon CR3` remains available as the alternate output path.
+
+## References
+
+- [AGFeldman/canon_burst_image_extract](https://github.com/AGFeldman/canon_burst_image_extract)
+- [lclevy/canon_cr3](https://github.com/lclevy/canon_cr3)
+- [Canon R6 II RAW Burst discussion on pixls.us](https://discuss.pixls.us/t/canon-r6-ii-raw-burst/45717)
+
 ## License
 
-No license file is currently included. Add one before distributing the project more broadly.
+No license file is currently included. Add one before broad public distribution.
