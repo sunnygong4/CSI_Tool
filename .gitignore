@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+
+.claude/
+resume.md
+
+dnglab-win-x64_v0.7.2/

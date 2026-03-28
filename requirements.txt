@@ -1,0 +1,6 @@
+# CSI Tool — Canon CR3 Burst File Extractor
+# No external dependencies required for core functionality.
+# All modules use Python stdlib (tkinter, struct, mmap, subprocess, etc.)
+#
+# Optional: Pillow (for future thumbnail preview support)
+# Pillow>=10.0
