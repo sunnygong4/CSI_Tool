@@ -5,23 +5,28 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import quote_plus
 
-from fastapi import FastAPI, HTTPException, Request, status
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi import FastAPI, Form, HTTPException, Request, status
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from ..utils.file_helpers import human_readable_size
-from .auth import hash_client_ip, verify_signed_token
+from .auth import create_signed_token, hash_client_ip, hash_secret_value, verify_signed_token
 from .config import WebConfig
 from .db import JobRecord, JobStore
 from .processor import JobProcessor, build_archive_name, build_source_key
 from .storage import DownloadTarget, LocalStorage, R2Storage, StorageBackend, UploadTarget
 
 logger = logging.getLogger(__name__)
+
+ADMIN_COOKIE_NAME = "csi_admin_session"
+ADMIN_COOKIE_PURPOSE = "admin"
 
 FORMAT_LABELS = {
     "dng": "Adobe DNG",
@@ -100,6 +105,85 @@ def create_app(config: WebConfig | None = None) -> FastAPI:
                 "storage_backend": services.config.storage_backend,
             },
         )
+
+    @app.get("/log", response_class=HTMLResponse)
+    async def log_view(request: Request, notice: str | None = None, error: str | None = None):
+        authenticated = _is_admin_authenticated(request)
+        recent_logs = _read_log_tail(services.config.log_path, services.config.log_tail_lines) if authenticated else []
+        jobs = services.store.list_jobs()[:20] if authenticated else []
+        return services.templates.TemplateResponse(
+            request=request,
+            name="log.html",
+            context={
+                "authenticated": authenticated,
+                "notice": notice,
+                "error": error,
+                "recent_logs": recent_logs,
+                "log_path": str(services.config.log_path),
+                "log_tail_lines": services.config.log_tail_lines,
+                "jobs": jobs,
+            },
+            status_code=200 if authenticated else 401,
+        )
+
+    @app.post("/log/login")
+    async def log_login(request: Request, token: str = Form(...)):
+        if token != services.config.effective_admin_token:
+            return services.templates.TemplateResponse(
+                request=request,
+                name="log.html",
+                context={
+                    "authenticated": False,
+                    "notice": None,
+                    "error": "Admin token was incorrect.",
+                    "recent_logs": [],
+                    "log_path": str(services.config.log_path),
+                    "log_tail_lines": services.config.log_tail_lines,
+                    "jobs": [],
+                },
+                status_code=403,
+            )
+
+        expires_at = int(time.time()) + (services.config.admin_session_hours * 3600)
+        session_token = create_signed_token(
+            services.config.app_secret,
+            ADMIN_COOKIE_PURPOSE,
+            hash_secret_value(services.config.effective_admin_token),
+            expires_at,
+        )
+        response = RedirectResponse(url="/log?notice=Signed+in", status_code=303)
+        response.set_cookie(
+            ADMIN_COOKIE_NAME,
+            session_token,
+            max_age=services.config.admin_session_hours * 3600,
+            httponly=True,
+            secure=services.config.environment == "production",
+            samesite="lax",
+        )
+        return response
+
+    @app.post("/log/logout")
+    async def log_logout(request: Request):
+        response = RedirectResponse(url="/log?notice=Signed+out", status_code=303)
+        response.delete_cookie(ADMIN_COOKIE_NAME)
+        return response
+
+    @app.post("/log/clear")
+    async def clear_log_file(request: Request):
+        _require_admin(request)
+        services.config.log_path.parent.mkdir(parents=True, exist_ok=True)
+        services.config.log_path.write_text("", encoding="utf-8")
+        return RedirectResponse(url="/log?notice=Logs+cleared", status_code=303)
+
+    @app.post("/log/reset")
+    async def reset_service(request: Request):
+        _require_admin(request)
+        result = services.processor.reset_service_state()
+        notice = (
+            f"Service state reset. Cleared {result['jobs_cleared']} jobs, "
+            f"{result['objects_deleted']} objects, and {result['workspaces_cleared']} workspaces."
+        )
+        return RedirectResponse(url=f"/log?notice={quote_plus(notice)}", status_code=303)
 
     @app.post("/api/jobs/initiate")
     async def initiate_job(payload: InitiateJobRequest, request: Request):
@@ -344,6 +428,35 @@ def _client_ip(request: Request) -> str:
     if request.client is not None and request.client.host:
         return request.client.host
     return "unknown"
+
+
+def _is_admin_authenticated(request: Request) -> bool:
+    services = _services(request)
+    token = request.cookies.get(ADMIN_COOKIE_NAME)
+    if not token:
+        return False
+    return verify_signed_token(
+        services.config.app_secret,
+        ADMIN_COOKIE_PURPOSE,
+        hash_secret_value(services.config.effective_admin_token),
+        token,
+    )
+
+
+def _require_admin(request: Request) -> None:
+    if not _is_admin_authenticated(request):
+        raise HTTPException(status_code=403, detail="Admin login required.")
+
+
+def _read_log_tail(log_path: Path, max_lines: int) -> list[str]:
+    if not log_path.exists():
+        return []
+
+    tail: deque[str] = deque(maxlen=max_lines)
+    with log_path.open("r", encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            tail.append(line.rstrip("\n"))
+    return list(tail)
 
 
 def _serialize_job(job: JobRecord) -> dict[str, object]:

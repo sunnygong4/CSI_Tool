@@ -137,6 +137,12 @@ class JobStore:
             row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
         return self._row_to_job(row) if row else None
 
+    def list_jobs(self) -> list[JobRecord]:
+        """Return all jobs, newest first."""
+        with self._connect() as conn:
+            rows = conn.execute("SELECT * FROM jobs ORDER BY created_at DESC, id DESC").fetchall()
+        return [self._row_to_job(row) for row in rows]
+
     def count_recent_jobs_for_ip(self, client_ip_hash: str, since_ts: int) -> int:
         """Count jobs created by an IP hash since a given timestamp."""
         with self._connect() as conn:
@@ -352,6 +358,11 @@ class JobStore:
         placeholders = ", ".join("?" for _ in job_ids)
         with self._connect() as conn:
             conn.execute(f"DELETE FROM jobs WHERE id IN ({placeholders})", tuple(job_ids))
+
+    def delete_all_jobs(self) -> None:
+        """Delete every job from the database."""
+        with self._connect() as conn:
+            conn.execute("DELETE FROM jobs")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.database_path, timeout=30, isolation_level=None)

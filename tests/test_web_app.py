@@ -33,9 +33,11 @@ class WebAppIntegrationTestCase(unittest.TestCase):
             database_path=root / "jobs.sqlite3",
             work_root=root / "work",
             local_storage_root=root / "storage",
+            log_path=root / "csi_web.log",
             storage_backend="local",
             require_dnglab=False,
             default_output_format="dng",
+            admin_token="admin-token",
         )
         self.app = create_app(config)
         self.client = TestClient(self.app)
@@ -137,6 +139,50 @@ class WebAppIntegrationTestCase(unittest.TestCase):
             },
         )
         self.assertEqual(response.status_code, 413)
+
+    def test_log_page_login_and_clear(self) -> None:
+        self.services.config.log_path.write_text("line one\nline two\n", encoding="utf-8")
+
+        unauthenticated = self.client.get("/log")
+        self.assertEqual(unauthenticated.status_code, 401)
+        self.assertIn("Admin sign in", unauthenticated.text)
+
+        login = self.client.post("/log/login", data={"token": "admin-token"}, follow_redirects=False)
+        self.assertEqual(login.status_code, 303)
+        self.assertIn("csi_admin_session", login.headers.get("set-cookie", ""))
+
+        logs_page = self.client.get("/log")
+        self.assertEqual(logs_page.status_code, 200)
+        self.assertIn("line one", logs_page.text)
+
+        cleared = self.client.post("/log/clear", follow_redirects=False)
+        self.assertEqual(cleared.status_code, 303)
+        self.assertEqual(self.services.config.log_path.read_text(encoding="utf-8"), "")
+
+    def test_reset_service_state_endpoint(self) -> None:
+        initiated = self.client.post(
+            "/api/jobs/initiate",
+            json={
+                "filename": "burst.CR3",
+                "file_size": 4096,
+                "output_format": "dng",
+            },
+        )
+        self.assertEqual(initiated.status_code, 200)
+        payload = initiated.json()
+
+        upload_response = self.client.put(
+            payload["upload"]["url"],
+            content=b"fake-cr3-payload",
+            headers={"content-type": "application/octet-stream"},
+        )
+        self.assertEqual(upload_response.status_code, 200)
+        self.client.post(f"/api/jobs/{payload['job_id']}/upload-complete", json={})
+
+        self.client.post("/log/login", data={"token": "admin-token"})
+        reset = self.client.post("/log/reset", follow_redirects=False)
+        self.assertEqual(reset.status_code, 303)
+        self.assertIsNone(self.services.store.get_job(payload["job_id"]))
 
     def test_can_recover_latest_job_for_same_client(self) -> None:
         initiated = self.client.post(

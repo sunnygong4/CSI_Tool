@@ -33,6 +33,7 @@ class WebConfig:
     database_path: Path = Path("data/csi_web.db")
     work_root: Path = Path("data/work")
     local_storage_root: Path = Path("data/storage")
+    log_path: Path = Path("data/csi_web.log")
     storage_backend: str = "local"
     dnglab_path: str = "/usr/local/bin/dnglab"
     require_dnglab: bool = False
@@ -47,6 +48,9 @@ class WebConfig:
     worker_poll_seconds: int = 5
     presigned_upload_expiration_seconds: int = 15 * 60
     presigned_download_expiration_seconds: int = 15 * 60
+    log_tail_lines: int = 400
+    admin_token: str = ""
+    admin_session_hours: int = 12
     r2_endpoint_url: str = ""
     r2_region_name: str = "auto"
     r2_access_key_id: str = ""
@@ -67,6 +71,7 @@ class WebConfig:
             database_path=Path(os.getenv("CSI_WEB_DATABASE_PATH", "data/csi_web.db")),
             work_root=Path(os.getenv("CSI_WEB_WORK_ROOT", "data/work")),
             local_storage_root=Path(os.getenv("CSI_WEB_LOCAL_STORAGE_ROOT", "data/storage")),
+            log_path=Path(os.getenv("CSI_WEB_LOG_PATH", "data/csi_web.log")),
             storage_backend=os.getenv("CSI_WEB_STORAGE_BACKEND", "local"),
             dnglab_path=os.getenv("CSI_WEB_DNGLAB_PATH", "/usr/local/bin/dnglab"),
             require_dnglab=_env_bool("CSI_WEB_REQUIRE_DNGLAB", False),
@@ -87,6 +92,9 @@ class WebConfig:
                 "CSI_WEB_PRESIGNED_DOWNLOAD_EXPIRATION_SECONDS",
                 15 * 60,
             ),
+            log_tail_lines=_env_int("CSI_WEB_LOG_TAIL_LINES", 400),
+            admin_token=os.getenv("CSI_WEB_ADMIN_TOKEN", ""),
+            admin_session_hours=_env_int("CSI_WEB_ADMIN_SESSION_HOURS", 12),
             r2_endpoint_url=os.getenv("CSI_WEB_R2_ENDPOINT_URL", ""),
             r2_region_name=os.getenv("CSI_WEB_R2_REGION_NAME", "auto"),
             r2_access_key_id=os.getenv("CSI_WEB_R2_ACCESS_KEY_ID", ""),
@@ -108,6 +116,12 @@ class WebConfig:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self.work_root.mkdir(parents=True, exist_ok=True)
         self.local_storage_root.mkdir(parents=True, exist_ok=True)
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    @property
+    def effective_admin_token(self) -> str:
+        """Return the token accepted for admin log actions."""
+        return self.admin_token or self.app_secret
 
     def validate(self) -> None:
         """Validate supported configuration choices."""
@@ -127,6 +141,10 @@ class WebConfig:
             raise ValueError("CSI_WEB_PER_IP_HOURLY_LIMIT must be >= 1")
         if self.upload_max_bytes < 1:
             raise ValueError("CSI_WEB_UPLOAD_MAX_BYTES must be >= 1")
+        if self.log_tail_lines < 50:
+            raise ValueError("CSI_WEB_LOG_TAIL_LINES must be >= 50")
+        if self.admin_session_hours < 1:
+            raise ValueError("CSI_WEB_ADMIN_SESSION_HOURS must be >= 1")
         if self.processing_concurrency != 1:
             raise ValueError("CSI_WEB_PROCESSING_CONCURRENCY is fixed to 1 for v1")
         if self.storage_backend == "r2":

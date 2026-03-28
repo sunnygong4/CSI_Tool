@@ -172,6 +172,38 @@ class JobProcessor:
         logger.info("Cleaned %d expired web job(s)", len(job_ids))
         return len(job_ids)
 
+    def reset_service_state(self) -> dict[str, int]:
+        """Delete all tracked jobs, storage objects, and local workspaces."""
+        jobs = self.store.list_jobs()
+        object_keys: list[str] = []
+        workspace_count = 0
+
+        for job in jobs:
+            object_keys.append(job.source_key)
+            if job.result_key:
+                object_keys.append(job.result_key)
+            workspace = self.config.work_root / job.id
+            if workspace.exists():
+                workspace_count += 1
+                self._cleanup_workspace(workspace)
+
+        if self.config.work_root.exists():
+            for child in self.config.work_root.iterdir():
+                workspace_count += 1
+                self._cleanup_workspace(child)
+
+        self.storage.delete_objects(object_keys)
+        self.store.delete_all_jobs()
+        self._last_progress_log.clear()
+
+        result = {
+            "jobs_cleared": len(jobs),
+            "objects_deleted": len([key for key in object_keys if key]),
+            "workspaces_cleared": workspace_count,
+        }
+        logger.warning("Admin reset cleared %s", result)
+        return result
+
     def _parse_burst(self, input_path: Path) -> BurstFile:
         burst = self.parser.parse(input_path)
         if not burst.is_valid:

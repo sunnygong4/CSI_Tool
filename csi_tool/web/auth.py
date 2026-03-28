@@ -13,6 +13,11 @@ def hash_client_ip(client_ip: str, salt: str) -> str:
     return hashlib.sha256(f"{salt}:{client_ip}".encode("utf-8")).hexdigest()
 
 
+def hash_secret_value(value: str) -> str:
+    """Hash a secret token into a stable identifier."""
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
 def create_signed_token(secret: str, purpose: str, job_id: str, expires_at: int) -> str:
     """Create a short signed token tied to a job and purpose."""
     message = f"{purpose}:{job_id}:{expires_at}".encode("utf-8")
@@ -43,4 +48,3 @@ def verify_signed_token(
 
     expected = create_signed_token(secret, purpose, job_id, expires_at)
     return hmac.compare_digest(expected, token)
-

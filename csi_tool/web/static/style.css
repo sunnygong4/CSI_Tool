@@ -292,6 +292,143 @@ a {
     margin-top: 18px;
 }
 
+.login-panel,
+.log-jobs-panel,
+.log-output-panel {
+    margin-top: 18px;
+    padding: 22px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.login-panel h2,
+.log-toolbar h2,
+.log-jobs-panel h2 {
+    margin: 0;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 1.45rem;
+}
+
+.log-toolbar {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: flex-start;
+    margin-top: 18px;
+}
+
+.toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.inline-form {
+    margin: 0;
+}
+
+.toolbar-link,
+.toolbar-link:visited {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+}
+
+.danger-button {
+    padding: 14px 18px;
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(255, 159, 151, 0.2);
+    background: rgba(255, 159, 151, 0.12);
+    color: var(--error);
+    font: inherit;
+    cursor: pointer;
+    transition: transform 160ms ease, background 160ms ease, opacity 160ms ease;
+}
+
+.danger-button:hover {
+    transform: translateY(-1px);
+}
+
+.admin-message {
+    margin-top: 18px;
+    padding: 14px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 0.95rem;
+}
+
+.admin-message-ok {
+    border: 1px solid rgba(123, 214, 164, 0.2);
+    background: rgba(123, 214, 164, 0.1);
+    color: var(--success);
+}
+
+.admin-message-error {
+    border: 1px solid rgba(255, 159, 151, 0.22);
+    background: rgba(255, 159, 151, 0.08);
+    color: var(--error);
+}
+
+.muted-copy {
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-size: 0.94rem;
+    line-height: 1.55;
+}
+
+.job-list {
+    display: grid;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.job-card {
+    padding: 14px 16px;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.job-card__row {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    align-items: center;
+}
+
+.job-card__row + .job-card__row {
+    margin-top: 8px;
+}
+
+.job-pill {
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(119, 197, 255, 0.14);
+    color: var(--accent);
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.log-output {
+    margin: 0;
+    padding: 18px;
+    min-height: 360px;
+    max-height: 70vh;
+    overflow: auto;
+    border-radius: var(--radius-md);
+    background: rgba(10, 16, 27, 0.92);
+    color: #dbe7f8;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    font-family: "Cascadia Mono", "Consolas", "Courier New", monospace;
+    font-size: 0.88rem;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
 @media (max-width: 860px) {
     .page-shell {
         width: min(100vw - 20px, 1040px);
@@ -307,6 +444,11 @@ a {
     .upload-panel,
     .status-panel {
         padding: 20px;
+    }
+
+    .log-toolbar,
+    .toolbar-actions {
+        display: grid;
     }
 
     .hero {

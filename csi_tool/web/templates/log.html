@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CSI Tool Logs</title>
+    <link rel="stylesheet" href="{{ request.url_for('static', path='style.css') }}">
+</head>
+<body>
+    <main class="page-shell">
+        <section class="panel app-panel">
+            <section class="hero">
+                <h1>CSI service logs</h1>
+                <p class="hero-copy">Admin page for recent logs, service cleanup, and stuck-job recovery.</p>
+            </section>
+
+            {% if notice %}
+            <div class="admin-message admin-message-ok">{{ notice }}</div>
+            {% endif %}
+            {% if error %}
+            <div class="admin-message admin-message-error">{{ error }}</div>
+            {% endif %}
+
+            {% if not authenticated %}
+            <section class="login-panel">
+                <h2>Admin sign in</h2>
+                <form method="post" action="/log/login" class="upload-form">
+                    <label class="field">
+                        <span>Admin token</span>
+                        <input type="password" name="token" autocomplete="current-password" required>
+                    </label>
+                    <button class="primary-button" type="submit">Open logs</button>
+                </form>
+            </section>
+            {% else %}
+            <section class="log-toolbar">
+                <div class="toolbar-copy">
+                    <h2>Recent output</h2>
+                    <p class="muted-copy">Showing the last {{ log_tail_lines }} lines from {{ log_path }}</p>
+                </div>
+                <div class="toolbar-actions">
+                    <a class="ghost-button toolbar-link" href="/log">Refresh</a>
+                    <form method="post" action="/log/clear" class="inline-form">
+                        <button class="ghost-button" type="submit">Clear logs</button>
+                    </form>
+                    <form method="post" action="/log/reset" class="inline-form">
+                        <button class="danger-button" type="submit">Reset service state</button>
+                    </form>
+                    <form method="post" action="/log/logout" class="inline-form">
+                        <button class="ghost-button" type="submit">Sign out</button>
+                    </form>
+                </div>
+            </section>
+
+            <section class="log-jobs-panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>Tracked jobs</h2>
+                    </div>
+                </div>
+                {% if jobs %}
+                <div class="job-list">
+                    {% for job in jobs %}
+                    <article class="job-card">
+                        <div class="job-card__row">
+                            <strong>{{ job.original_filename }}</strong>
+                            <span class="job-pill">{{ job.status }}</span>
+                        </div>
+                        <div class="job-card__row">
+                            <span>{{ job.output_format.upper() }}</span>
+                            <code>{{ job.id }}</code>
+                        </div>
+                        <p class="muted-copy">{{ job.progress_message }}</p>
+                    </article>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="muted-copy">No tracked jobs right now.</p>
+                {% endif %}
+            </section>
+
+            <section class="log-output-panel">
+                <pre class="log-output">{% if recent_logs %}{% for line in recent_logs %}{{ line }}
+{% endfor %}{% else %}No log lines yet.
+{% endif %}</pre>
+            </section>
+            {% endif %}
+        </section>
+    </main>
+</body>
+</html>

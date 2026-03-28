@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+import os
 import signal
 import threading
 import time
+from pathlib import Path
 
 from ..main import setup_logging
 from .app import build_services
@@ -15,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 def main() -> int:
     """Run the worker loop until interrupted."""
-    setup_logging()
+    setup_logging(Path(os.getenv("CSI_WEB_LOG_PATH", "data/csi_web.log")))
     services = build_services()
     stop_event = threading.Event()
 
