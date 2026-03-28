@@ -55,6 +55,7 @@ class DNGLabBackend:
         total = len(indices)
 
         for position, frame_index in enumerate(indices, start=1):
+            logger.info("Starting DNG frame %d/%d (source index %d)", position, total, frame_index + 1)
             if progress_callback:
                 progress_callback(position - 1, total, f"Frame {frame_index + 1} ({position}/{total})...")
 
@@ -66,6 +67,7 @@ class DNGLabBackend:
                     total_frames=max(indices) + 1 if indices else 0,
                 )
             )
+            logger.info("Finished DNG frame %d/%d", position, total)
 
         if progress_callback:
             progress_callback(total, total, f"Extracted {len(extracted)}/{total} frames")
@@ -93,6 +95,7 @@ class DNGLabBackend:
 
         with tempfile.TemporaryDirectory(dir=output_dir, prefix=".csi_intermediate_") as temp_dir:
             temp_dir_path = Path(temp_dir)
+            logger.info("Extracting intermediate CR3 for frame %d", frame_index + 1)
             temp_cr3 = self.native_backend.extract_frame_range(
                 input_path,
                 temp_dir_path,
@@ -109,6 +112,7 @@ class DNGLabBackend:
             ]
 
             timeout = TIMEOUT_BASE + TIMEOUT_PER_FRAME
+            logger.info("Converting frame %d CR3 -> DNG with dnglab", frame_index + 1)
             self._run_dnglab_streaming(args, timeout)
 
             dnglab_output = output_dir / f"{temp_cr3.stem}.dng"

@@ -62,6 +62,7 @@ class JobProcessor:
         self.parser = CR3Parser()
         self.native_backend = NativeCR3Backend()
         self.dnglab_backend: DNGLabBackend | None = None
+        self._last_progress_log: dict[str, tuple[int, str, int | None]] = {}
         self._initialize_runtime()
 
     def _initialize_runtime(self) -> None:
@@ -95,13 +96,19 @@ class JobProcessor:
         now_ts = int(time.time())
 
         try:
+            logger.info(
+                "Processing job %s: %s -> %s",
+                job.id,
+                job.original_filename,
+                job.output_format.upper(),
+            )
             workspace.mkdir(parents=True, exist_ok=True)
-            self.store.update_progress(job.id, 12, "Downloading source file...")
+            self._report_progress(job.id, 12, "Downloading source file...")
             self.storage.download_file(job.source_key, input_path)
 
-            self.store.update_progress(job.id, 18, "Parsing burst metadata...")
+            self._report_progress(job.id, 18, "Parsing burst metadata...")
             burst = self._parse_burst(input_path)
-            self.store.update_progress(
+            self._report_progress(
                 job.id,
                 20,
                 f"Found {burst.frame_count} burst frames.",
@@ -109,11 +116,11 @@ class JobProcessor:
             )
 
             extracted_files = self._extract_frames(job, burst, input_path, output_dir)
-            self.store.update_progress(job.id, 88, "Creating ZIP archive...", frame_count=len(extracted_files))
+            self._report_progress(job.id, 88, "Creating ZIP archive...", frame_count=len(extracted_files))
             self._create_zip(archive_path, extracted_files)
 
             result_key = build_result_key(self.config, job.id, archive_name)
-            self.store.update_progress(job.id, 95, "Uploading ZIP archive...", frame_count=len(extracted_files))
+            self._report_progress(job.id, 95, "Uploading ZIP archive...", frame_count=len(extracted_files))
             self.storage.upload_file(archive_path, result_key, "application/zip")
             self.store.mark_completed(
                 job.id,
@@ -139,6 +146,7 @@ class JobProcessor:
             )
             logger.exception("Unexpected failure while processing job %s", job.id)
         finally:
+            self._last_progress_log.pop(job.id, None)
             self._cleanup_workspace(workspace)
 
     def cleanup_expired_jobs(self) -> int:
@@ -186,7 +194,7 @@ class JobProcessor:
                 progress_pct = 30
             else:
                 progress_pct = 20 + int((current / total) * 60)
-            self.store.update_progress(
+            self._report_progress(
                 job.id,
                 min(progress_pct, 85),
                 message,
@@ -231,6 +239,24 @@ class JobProcessor:
         if isinstance(exc, DNGLabError):
             return f"DNG conversion failed: {message}"
         return message or "Frame extraction failed."
+
+    def _report_progress(
+        self,
+        job_id: str,
+        progress_pct: int,
+        progress_message: str,
+        *,
+        frame_count: int | None = None,
+    ) -> None:
+        self.store.update_progress(job_id, progress_pct, progress_message, frame_count=frame_count)
+
+        signature = (progress_pct, progress_message, frame_count)
+        if self._last_progress_log.get(job_id) == signature:
+            return
+        self._last_progress_log[job_id] = signature
+
+        frame_suffix = f" | frames={frame_count}" if frame_count is not None else ""
+        logger.info("Job %s [%s%%] %s%s", job_id, progress_pct, progress_message, frame_suffix)
 
     @staticmethod
     def _cleanup_workspace(workspace: Path) -> None:

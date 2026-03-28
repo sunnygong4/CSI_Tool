@@ -42,32 +42,6 @@ a {
     padding: 28px 0 48px;
 }
 
-.site-header {
-    display: flex;
-    justify-content: flex-start;
-    align-items: center;
-    margin-bottom: 18px;
-}
-
-.site-logo-link {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 18px;
-    transition: transform 160ms ease, opacity 160ms ease;
-}
-
-.site-logo-link:hover,
-.site-logo-link:focus-visible {
-    transform: translateY(-1px);
-    opacity: 0.94;
-}
-
-.site-logo {
-    width: clamp(92px, 11vw, 128px);
-    height: auto;
-}
-
 .app-panel {
     padding: 28px;
 }

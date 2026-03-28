@@ -122,8 +122,10 @@ def create_app(config: WebConfig | None = None) -> FastAPI:
         client_ip_hash = hash_client_ip(_client_ip(request), config_local.effective_ip_salt)
         one_hour_ago = int(time.time()) - 3600
         if services_local.store.has_active_job_for_ip(client_ip_hash):
+            logger.info("Rejected new job from %s because an active job already exists", client_ip_hash[:12])
             raise HTTPException(status_code=429, detail="You already have an active job in progress.")
         if services_local.store.count_recent_jobs_for_ip(client_ip_hash, one_hour_ago) >= config_local.per_ip_hourly_limit:
+            logger.info("Rejected new job from %s because the hourly limit was reached", client_ip_hash[:12])
             raise HTTPException(status_code=429, detail="Hourly job limit reached for this IP.")
 
         job_id = uuid.uuid4().hex
@@ -144,6 +146,13 @@ def create_app(config: WebConfig | None = None) -> FastAPI:
             job.id,
             job.source_key,
             config_local.presigned_upload_expiration_seconds,
+        )
+        logger.info(
+            "Created web job %s for %s (%s, %s)",
+            job.id,
+            job.original_filename,
+            FORMAT_LABELS.get(job.output_format, job.output_format),
+            human_readable_size(job.file_size),
         )
         return {
             "job_id": job.id,
@@ -217,6 +226,7 @@ def create_app(config: WebConfig | None = None) -> FastAPI:
         updated = services_local.store.mark_uploaded(job.id, int(time.time()))
         if updated is None:
             raise HTTPException(status_code=409, detail="Job upload state changed unexpectedly.")
+        logger.info("Upload completed for job %s", job.id)
         return _serialize_job(updated)
 
     @app.get("/api/jobs/recover")
@@ -226,6 +236,7 @@ def create_app(config: WebConfig | None = None) -> FastAPI:
         job = services_local.store.get_recoverable_job_for_ip(client_ip_hash, int(time.time()))
         if job is None:
             raise HTTPException(status_code=404, detail="No recoverable job found for this browser.")
+        logger.info("Recovered job %s for %s", job.id, client_ip_hash[:12])
         return _serialize_job(job)
 
     @app.get("/api/jobs/{job_id}")
@@ -255,6 +266,7 @@ def create_app(config: WebConfig | None = None) -> FastAPI:
             build_archive_name(job.original_filename, job.output_format),
             services_local.config.presigned_download_expiration_seconds,
         )
+        logger.info("Issued download link for job %s", job.id)
         return {
             "job_id": job.id,
             "expires_at": shortened_expiry,

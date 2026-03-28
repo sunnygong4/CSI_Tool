@@ -7,6 +7,7 @@ import signal
 import threading
 import time
 
+from ..main import setup_logging
 from .app import build_services
 
 logger = logging.getLogger(__name__)
@@ -14,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 def main() -> int:
     """Run the worker loop until interrupted."""
+    setup_logging()
     services = build_services()
     stop_event = threading.Event()
 
